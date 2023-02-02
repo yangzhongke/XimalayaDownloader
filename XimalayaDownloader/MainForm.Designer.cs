@@ -65,7 +65,6 @@
             this.txtURL.Name = "txtURL";
             this.txtURL.Size = new System.Drawing.Size(855, 23);
             this.txtURL.TabIndex = 1;
-            this.txtURL.Text = "https://www.ximalaya.com/sound/513843139";
             // 
             // btnGO
             // 
@@ -203,7 +202,7 @@
             this.Controls.Add(this.txtURL);
             this.Controls.Add(this.label1);
             this.Name = "MainForm";
-            this.Text = "MainForm";
+            this.Text = "高频率地下载喜马拉雅音频，有可能会导致被封号，请自行承担风险";
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             this.Load += new System.EventHandler(this.MainForm_Load);
             ((System.ComponentModel.ISupportInitialize)(this.webView)).EndInit();

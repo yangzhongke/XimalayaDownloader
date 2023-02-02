@@ -2,7 +2,6 @@
 using Microsoft.Web.WebView2.Core.DevToolsProtocolExtension;
 using System.Text.Json;
 using WebView2.DevTools.Dom;
-using static Microsoft.Web.WebView2.Core.DevToolsProtocolExtension.Console;
 
 namespace XimalayaDownloader;
 public partial class MainForm : Form
@@ -34,29 +33,52 @@ public partial class MainForm : Form
             return;
         }
 
+        var currenUri = webView.Source.ToString();
+        if(!currenUri.StartsWith("https://www.ximalaya.com/album/")&&!currenUri.StartsWith("https://www.ximalaya.com/sound/"))
+        {
+            MessageBox.Show(this, "请先打开要下载的专辑页面");
+            return;
+        }
+
+        //如果是专辑页面，则先转到第一个音频页面地址，因为音频页面地址有“查看更多”，免得在专辑页面翻页
+        if(currenUri.StartsWith("https://www.ximalaya.com/album/"))
+        {
+            await webView.WaitAndClickAsync("#anchor_sound_list > div.sound-list.H_g > ul > li:nth-child(1) > div.text._nO > a");
+        }
+        //等待音频列表加载完成
+        await webView.WaitAsync("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.track-list-wrap._sZ > ul > li:nth-child(1) > div.text._nO > a");
+
         var devToolsContext = await webView.CoreWebView2.CreateDevToolsContextAsync();
+
+        //点击“查看更多”
+        WebView2.DevTools.Dom.HtmlElement loadMore;
+        while ((loadMore = await devToolsContext.QuerySelectorAsync("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.track-list-wrap._sZ > ul > p")) != null)
+        {
+            await loadMore.ClickAsync();
+            await Task.Delay(100);
+        }
+
+        //遍历音频列表
         var liItems = await devToolsContext.QuerySelectorAllAsync("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.track-list-wrap._sZ > ul > li");
         List<string> songUrls = new();
         foreach (var item in liItems)
         {
             var link = await item.QuerySelectorAsync("a");
             string href = await link.GetAttributeAsync("href");
-            string title = await link.GetAttributeAsync("title");
-            /*
-            string strNumber = System.Text.RegularExpressions.Regex.Match(title, @"_(\d+)").Groups[1].Value;
-            int number = Convert.ToInt32(strNumber);
-            if (number <= 105) continue;*/
             songUrls.Add("https://www.ximalaya.com" + href);
         }
         downloadProgress.Maximum = songUrls.Count;
         webView.CoreWebView2.AddWebResourceRequestedFilter("*",
                                               CoreWebView2WebResourceContext.Media);
+        //遍历下载音频
         int counter = 0;
+        using HttpClient httpClient = new HttpClient();
         foreach (var songUrl in songUrls)
         {
             webView.CoreWebView2.Navigate(songUrl);
-            await webView.WaitContentLoaded();
+            await webView.WaitContentLoadedAsync();
 
+            //嗅探音频地址
             var tcsAudioUrl = new TaskCompletionSource<string>();
             EventHandler<CoreWebView2WebResourceRequestedEventArgs> audioRequested = (se, ev) => {
                 string audioUrl = ev.Request.Uri;
@@ -64,22 +86,29 @@ public partial class MainForm : Form
             };
             webView.CoreWebView2.WebResourceRequested += audioRequested;
             //等待标题出现，并且点击
-            await webView.WaitAndClick("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.sound-container.kn_ > div > div.sound-info.clearfix.kn_ > div > div.controls.kn_ > div.fl-wrapper.fl.price-btn-wrapper.kn_ > div > xm-player > div");
+            await webView.WaitAndClickAsync("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.sound-container.kn_ > div > div.sound-info.clearfix.kn_ > div > div.controls.kn_ > div.fl-wrapper.fl.price-btn-wrapper.kn_ > div > xm-player > div");
             string titleJson = await webView.ExecuteScriptAsync("document.querySelector('#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.sound-container.kn_ > div > div.sound-info.clearfix.kn_ > div > h1').innerHTML");
 
             string title = JsonSerializer.Deserialize<string>(titleJson);
             string audioUrl =  await tcsAudioUrl.Task;//等待音频加载，返回值为音频的路径
             webView.CoreWebView2.WebResourceRequested -= audioRequested;
-
-            HttpClient httpClient = new HttpClient();
+            
             using Stream audioStream = await httpClient.GetStreamAsync(audioUrl);
             foreach(var invalidChar in Path.GetInvalidFileNameChars())
             {
                 title = title.Replace(invalidChar, '_');
             }
-            using var outStream = System.IO.File.OpenWrite(Path.Combine(destDir, title + ".m4a"));
-            await audioStream.CopyToAsync(outStream);
-            labelStatus.Text = title+"下载完成";
+            string destFile = Path.Combine(destDir, title + ".m4a");
+            if(System.IO.File.Exists(destFile)&&new FileInfo(destFile).Length>4*1024)
+            {
+                labelStatus.Text = title + "已经存在，跳过";
+            }
+            else
+            {
+                using var outStream = System.IO.File.OpenWrite(destFile);
+                await audioStream.CopyToAsync(outStream);
+                labelStatus.Text = title + "下载完成";
+            }            
             counter++;
             downloadProgress.Value = counter;
         }
@@ -103,6 +132,7 @@ public partial class MainForm : Form
                 MessageBox.Show(this, "今天操作太频繁啦，可以明天再试试哦");
             }
         };
+        txtURL.Focus();
     }
 
     private void webView_SourceChanged(object sender, Microsoft.Web.WebView2.Core.CoreWebView2SourceChangedEventArgs e)

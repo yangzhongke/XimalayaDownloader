@@ -1,6 +1,8 @@
 ﻿using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Core.DevToolsProtocolExtension;
 using System.Text.Json;
 using WebView2.DevTools.Dom;
+using static Microsoft.Web.WebView2.Core.DevToolsProtocolExtension.Console;
 
 namespace XimalayaDownloader;
 public partial class MainForm : Form
@@ -39,6 +41,11 @@ public partial class MainForm : Form
         {
             var link = await item.QuerySelectorAsync("a");
             string href = await link.GetAttributeAsync("href");
+            string title = await link.GetAttributeAsync("title");
+            /*
+            string strNumber = System.Text.RegularExpressions.Regex.Match(title, @"_(\d+)").Groups[1].Value;
+            int number = Convert.ToInt32(strNumber);
+            if (number <= 105) continue;*/
             songUrls.Add("https://www.ximalaya.com" + href);
         }
         downloadProgress.Maximum = songUrls.Count;
@@ -66,6 +73,10 @@ public partial class MainForm : Form
 
             HttpClient httpClient = new HttpClient();
             using Stream audioStream = await httpClient.GetStreamAsync(audioUrl);
+            foreach(var invalidChar in Path.GetInvalidFileNameChars())
+            {
+                title = title.Replace(invalidChar, '_');
+            }
             using var outStream = System.IO.File.OpenWrite(Path.Combine(destDir, title + ".m4a"));
             await audioStream.CopyToAsync(outStream);
             labelStatus.Text = title+"下载完成";
@@ -79,7 +90,19 @@ public partial class MainForm : Form
     private async void MainForm_Load(object sender, EventArgs e)
     {
         await webView.EnsureCoreWebView2Async();
+        webView.CoreWebView2.IsMuted = true;
         webView.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = true;
+        await webView.CoreWebView2.CallDevToolsProtocolMethodAsync("Log.enable", "{}");
+        var helper = webView.CoreWebView2.GetDevToolsProtocolHelper();
+
+        //https://stackoverflow.com/questions/66303305/webview2-devtoolsprotocolevent-not-raising
+        await helper.Console.EnableAsync();//it's required for Console.MessageAdded += 
+        helper.Console.MessageAdded += (sender, args) => {
+            if(args.Message.Text.Contains("今天操作太频繁啦，可以明天再试试哦"))
+            {
+                MessageBox.Show(this, "今天操作太频繁啦，可以明天再试试哦");
+            }
+        };
     }
 
     private void webView_SourceChanged(object sender, Microsoft.Web.WebView2.Core.CoreWebView2SourceChangedEventArgs e)

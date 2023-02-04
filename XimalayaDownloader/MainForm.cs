@@ -54,28 +54,50 @@ public partial class MainForm : Form
         WebView2.DevTools.Dom.HtmlElement loadMore;
         while ((loadMore = await devToolsContext.QuerySelectorAsync("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.track-list-wrap._sZ > ul > p")) != null)
         {
-            await loadMore.ClickAsync();
+            try
+            {
+                await loadMore.ClickAsync();
+            }
+            catch
+            {
+
+            }
             await Task.Delay(100);
         }
 
         //遍历音频列表
         var liItems = await devToolsContext.QuerySelectorAllAsync("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.track-list-wrap._sZ > ul > li");
-        List<string> songUrls = new();
+        List<MediaItem> mediaItems = new();
         foreach (var item in liItems)
         {
             var link = await item.QuerySelectorAsync("a");
             string href = await link.GetAttributeAsync("href");
-            songUrls.Add("https://www.ximalaya.com" + href);
+            string title = await link.GetAttributeAsync("title");
+            mediaItems.Add(new MediaItem(title, "https://www.ximalaya.com" + href));
         }
-        downloadProgress.Maximum = songUrls.Count;
+        downloadProgress.Maximum = mediaItems.Count;
         webView.CoreWebView2.AddWebResourceRequestedFilter("*",
                                               CoreWebView2WebResourceContext.Media);
         //遍历下载音频
         int counter = 0;
         using HttpClient httpClient = new HttpClient();
-        foreach (var songUrl in songUrls)
+        foreach (var mediaItem in mediaItems)
         {
-            webView.CoreWebView2.Navigate(songUrl);
+            counter++;
+            downloadProgress.Value = counter;
+            string title = mediaItem.Title;
+            //去除路径中的非法字符
+            foreach (var invalidChar in Path.GetInvalidFileNameChars())
+            {
+                title = title.Replace(invalidChar, '_');
+            }
+            string destFile = Path.Combine(destDir, title + ".m4a");
+            if (System.IO.File.Exists(destFile) && new FileInfo(destFile).Length > 4 * 1024)
+            {
+                labelStatus.Text = title + "已经存在，跳过";
+                continue;
+            }
+            webView.CoreWebView2.Navigate(mediaItem.url);
             await webView.WaitContentLoadedAsync();
 
             //嗅探音频地址
@@ -89,28 +111,13 @@ public partial class MainForm : Form
             await webView.WaitAndClickAsync("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.sound-container.kn_ > div > div.sound-info.clearfix.kn_ > div > div.controls.kn_ > div.fl-wrapper.fl.price-btn-wrapper.kn_ > div > xm-player > div");
             string titleJson = await webView.ExecuteScriptAsync("document.querySelector('#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.sound-container.kn_ > div > div.sound-info.clearfix.kn_ > div > h1').innerHTML");
 
-            string title = JsonSerializer.Deserialize<string>(titleJson);
             string audioUrl =  await tcsAudioUrl.Task;//等待音频加载，返回值为音频的路径
             webView.CoreWebView2.WebResourceRequested -= audioRequested;
             
-            using Stream audioStream = await httpClient.GetStreamAsync(audioUrl);
-            foreach(var invalidChar in Path.GetInvalidFileNameChars())
-            {
-                title = title.Replace(invalidChar, '_');
-            }
-            string destFile = Path.Combine(destDir, title + ".m4a");
-            if(System.IO.File.Exists(destFile)&&new FileInfo(destFile).Length>4*1024)
-            {
-                labelStatus.Text = title + "已经存在，跳过";
-            }
-            else
-            {
-                using var outStream = System.IO.File.OpenWrite(destFile);
-                await audioStream.CopyToAsync(outStream);
-                labelStatus.Text = title + "下载完成";
-            }            
-            counter++;
-            downloadProgress.Value = counter;
+            using Stream audioStream = await httpClient.GetStreamAsync(audioUrl);            
+            using var outStream = System.IO.File.OpenWrite(destFile);
+            await audioStream.CopyToAsync(outStream);
+            labelStatus.Text = title + "下载完成";
         }
         await devToolsContext.DisposeAsync();
         MessageBox.Show(this, "全部下载完成");
@@ -129,7 +136,10 @@ public partial class MainForm : Form
         helper.Console.MessageAdded += (sender, args) => {
             if(args.Message.Text.Contains("今天操作太频繁啦，可以明天再试试哦"))
             {
-                MessageBox.Show(this, "今天操作太频繁啦，可以明天再试试哦");
+                //避免阻塞JS线程，造成执行超时
+                this.BeginInvoke(() => {
+                    MessageBox.Show(this, "今天操作太频繁啦，可以明天再试试哦");
+                });
             }
         };
         txtURL.Focus();
@@ -161,3 +171,5 @@ public partial class MainForm : Form
         webView.Refresh();
     }
 }
+
+file record MediaItem(string Title,string url);

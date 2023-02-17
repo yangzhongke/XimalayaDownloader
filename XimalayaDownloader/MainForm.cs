@@ -46,13 +46,13 @@ public partial class MainForm : Form
             await webView.WaitAndClickAsync("#anchor_sound_list > div.sound-list.H_g > ul > li:nth-child(1) > div.text._nO > a");
         }
         //等待音频列表加载完成
-        await webView.WaitAsync("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.track-list-wrap._sZ > ul > li:nth-child(1) > div.text._nO > a");
+        await webView.WaitAsync("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.track-list-wrap.o_O > ul > p");
 
         var devToolsContext = await webView.CoreWebView2.CreateDevToolsContextAsync();
 
         //点击“查看更多”
         WebView2.DevTools.Dom.HtmlElement loadMore;
-        while ((loadMore = await devToolsContext.QuerySelectorAsync("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.track-list-wrap._sZ > ul > p")) != null)
+        while ((loadMore = await devToolsContext.QuerySelectorAsync("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.track-list-wrap.o_O > ul > p")) != null)
         {
             try
             {
@@ -66,7 +66,7 @@ public partial class MainForm : Form
         }
 
         //遍历音频列表
-        var liItems = await devToolsContext.QuerySelectorAllAsync("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.track-list-wrap._sZ > ul > li");
+        var liItems = await devToolsContext.QuerySelectorAllAsync("#award > main > div.sound-detail > div.clearfix > div.detail.layout-main > div.track-list-wrap.o_O > ul > li");
         List<MediaItem> mediaItems = new();
         foreach (var item in liItems)
         {

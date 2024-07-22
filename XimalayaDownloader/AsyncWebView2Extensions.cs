@@ -1,4 +1,5 @@
 ﻿using Microsoft.Web.WebView2.Core;
+using System.Diagnostics;
 using System.Text.Json;
 using Xyzzer.AsyncUI;
 
@@ -14,9 +15,11 @@ namespace XimalayaDownloader
                 eh => webView.CoreWebView2.DOMContentLoaded -= eh);
         }
 
-        public static async Task<int> WaitAndClickAsync(this Microsoft.Web.WebView2.WinForms.WebView2 webView, string querySelector)
+        public static async Task<int> WaitAndClickAsync(this Microsoft.Web.WebView2.WinForms.WebView2 webView, string querySelector, int timeoutSec=20)
         {
             TaskCompletionSource<int> tcs = new();
+            Stopwatch stopwatch = new();
+            stopwatch.Start();
             while (true)
             {
                 string lenJson = await webView.ExecuteScriptAsync("document.querySelectorAll('" + querySelector + "').length");
@@ -29,13 +32,20 @@ namespace XimalayaDownloader
                     break;
                 }
                 await Task.Delay(100);
+                if (stopwatch.Elapsed.TotalSeconds > timeoutSec)
+                {
+                    tcs.SetException(new TimeoutException("Timeout"));
+                    break;
+                }
             }
             return await tcs.Task;
         }
 
-        public static async Task<int> WaitAsync(this Microsoft.Web.WebView2.WinForms.WebView2 webView, string querySelector)
+        public static async Task<int> WaitAsync(this Microsoft.Web.WebView2.WinForms.WebView2 webView, string querySelector, int timeoutSec = 20)
         {
             TaskCompletionSource<int> tcs = new();
+            Stopwatch stopwatch = new();
+            stopwatch.Start();
             while (true)
             {
                 string lenJson = await webView.ExecuteScriptAsync("document.querySelectorAll('" + querySelector + "').length");
@@ -46,6 +56,11 @@ namespace XimalayaDownloader
                     break;
                 }
                 await Task.Delay(100);
+                if (stopwatch.Elapsed.TotalSeconds > timeoutSec)
+                {
+                    tcs.SetException(new TimeoutException("Timeout"));
+                    break;
+                }
             }
             return await tcs.Task;
         }
